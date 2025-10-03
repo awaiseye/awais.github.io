@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Spikes Animation</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            border: 1px solid #000;
+            margin-top: 20px;
+        }
+
+        #serverStatus {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .online {
+            background-color: green;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .axis-label {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .grid-line {
+            stroke: #ddd;
+            stroke-width: 1;
+            shape-rendering: crispEdges;
+        }
+    </style>
+</head>
+<body>
+    <h2> Pulse Reading </h2>
+    <div>
+        <span id="serverStatus"></span> Server status: <span id="statusText">Connecting...</span>
+    </div>
+    <canvas id="dynamicSpikesCanvas" width="800" height="200"></canvas>
+
+    <script>
+        const canvas = document.getElementById('dynamicSpikesCanvas');
+        const ctx = canvas.getContext('2d');
+        const serverStatus = document.getElementById('serverStatus');
+        const statusText = document.getElementById('statusText');
+
+        const spikes = []; // Array to store spike data
+
+        const socket = new WebSocket('ws://localhost:8765');
+
+        socket.addEventListener('open', function (event) {
+            console.log('WebSocket connection opened.');
+            updateServerStatus(true);
+        });
+
+        socket.addEventListener('close', function (event) {
+            console.log('WebSocket connection closed.');
+            updateServerStatus(false);
+        });
+
+        socket.addEventListener('message', function (event) {
+            const numericValue = parseFloat(event.data);
+
+            // Add a new spike with the numeric value as its height at the right edge of the canvas
+            spikes.push({ x: canvas.width, height: numericValue });
+
+            // Remove spikes that are out of the canvas to avoid memory overflow
+            spikes.forEach((spike, index) => {
+                if (spike.x < 0) {
+                    spikes.splice(index, 1);
+                }
+            });
+        });
+
+        function drawDynamicSpikes() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the y-axis label
+            ctx.fillStyle = '#000';
+            ctx.font = '12px Arial';
+            ctx.fillText('RSSI', 10, 10);
+
+            // Draw the x-axis label
+            ctx.fillText('Time (sec)', canvas.width - 60, canvas.height - 10);
+
+            // Draw the flat line
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+
+            // Draw grid lines
+            drawGridLines();
+
+            // Draw each spike
+            spikes.forEach(spike => {
+                ctx.beginPath();
+                ctx.moveTo(spike.x, canvas.height / 2);
+                ctx.lineTo(spike.x, canvas.height / 2 - spike.height);
+                ctx.strokeStyle = 'red'; // Spike color
+                ctx.stroke();
+
+                // Move the spike to the left
+                spike.x -= 2;
+            });
+
+            requestAnimationFrame(drawDynamicSpikes);
+        }
+
+        function updateServerStatus(online) {
+            if (online) {
+                serverStatus.classList.add('online');
+                statusText.textContent = 'Online';
+            } else {
+                serverStatus.classList.remove('online');
+                statusText.textContent = 'Offline';
+            }
+        }
+
+        function drawGridLines() {
+            const numGridLinesX = 8;
+            const numGridLinesY = 4;
+
+            // Draw horizontal grid lines
+            for (let i = 1; i < numGridLinesY; i++) {
+                const y = (canvas.height / numGridLinesY) * i;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            // Draw vertical grid lines
+            for (let i = 1; i < numGridLinesX; i++) {
+                const x = (canvas.width / numGridLinesX) * i;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        drawDynamicSpikes();
+    </script>
+</body>
+</html>
